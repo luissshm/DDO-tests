@@ -9,6 +9,8 @@ object DaasManager {
     }
 
     private const val TAG = "DaaS"
+    // Listener for UI callbacks
+    var ddoCallback: Any? = null
 
     external fun nativeCreate()
     external fun nativeInit(sid: Int, din: Int): Int
@@ -57,10 +59,18 @@ object DaasManager {
     @JvmStatic
     fun onDDOReceived(origin: Long, value: Int) {
         Log.d(TAG, "DDO RECEIVED from $origin value=$value")
+        (ddoCallback as? dynamicListener)?.onDDOReceived(origin, value)
     }
 
     @JvmStatic
     fun onAutoPull(origin: Long, value: Int) {
         Log.d("DaaS-AUTO", "AUTO-PULL origin=$origin value=$value")
+        (ddoCallback as? dynamicListener)?.onAutoPull(origin, value)
+    }
+
+    // Interface type to avoid casts
+    interface dynamicListener {
+        fun onDDOReceived(origin: Long, value: Int)
+        fun onAutoPull(origin: Long, value: Int)
     }
 }

@@ -19,7 +19,7 @@ class MainActivity : AppCompatActivity() {
 
     private val TAG = "DaaS-UI"
 //    private val localDin = Random.nextInt(100, 10000).toLong()
-    private val localDin = 103
+    private val localDin = 102
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,6 +88,28 @@ class MainActivity : AppCompatActivity() {
             val drivers = DaasManager.nativeListDrivers()
             log("[DaaS] Available drivers: $drivers")
         }
+    }
+
+    // ------------------ DDO Listener Hook ------------------
+    private val ddoListener = object : DaasManager.dynamicListener {
+        override fun onDDOReceived(origin: Long, value: Int) {
+            runOnUiThread { log("[DDO RECEIVED] from $origin value=$value") }
+        }
+        override fun onAutoPull(origin: Long, value: Int) {
+            runOnUiThread { log("[AUTO-PULL] origin=$origin value=$value") }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Register listener so DaasManager callbacks go to this activity
+        DaasManager.ddoCallback = ddoListener
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Unregister listener to avoid leaks
+        DaasManager.ddoCallback = null
     }
 
     private fun startPerformLoop() {
