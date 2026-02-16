@@ -44,9 +44,9 @@
 class DaasAPI
 {
 public:
-    DaasAPI();                                    
-    DaasAPI(IDaasApiEvent *);                     
-    DaasAPI(IDaasApiEvent *, const char *lhver_); 
+    DaasAPI();
+    DaasAPI(IDaasApiEvent *);
+    DaasAPI(IDaasApiEvent *, const char *lhver_);
     ~DaasAPI();
 
     //////////////////////////////////////////////////////////////////////
@@ -84,7 +84,7 @@ public:
     @end
     */
     daas_error_t doEnd();                         // releases resources and deactivates node
-   
+
     /**
         @details Resets the local node and clears all resources. It disconnects also from the network that it currently is.
         @param none
@@ -92,7 +92,7 @@ public:
         @end
     */
     daas_error_t doReset();                       // reset resources and restarts services
-    
+
     /**
         @details Initializes services and resources for the local node.
         @param sid: SID of the local node
@@ -104,7 +104,7 @@ public:
         @end
     */
     daas_error_t doInit(din_t sid, din_t din);  // initializes services and resources (Real-Time or Multi-Threading, release dependent)
-    
+
     /**
 
         @details Executes the node's main processing loop in either real-time or multi-threading mode. 
@@ -124,7 +124,7 @@ public:
         @end
     */
     daas_error_t doPerform(performs_mode_t mode); // perform node's task ( in RT mode needs to be called cyclically)
-    
+
     /**
         @details Configure driver for network technology (links)
         
@@ -147,9 +147,6 @@ public:
     /**
         @details Returns the status of the local node.
        
-        @param none
-        
-        @returns the status of the local node.
         - This includes hardware version, linked channels, synchronization status, security policy, and more.
     
         @end

@@ -2,129 +2,179 @@
 #include <string>
 #include <android/log.h>
 #include "daas.hpp"
-#include "daas_types.hpp"
 
-#define LOG_TAG "DAAS-JNI"
+#define LOG_TAG "DaaS-Native"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
 static JavaVM* g_vm = nullptr;
-static jobject g_daasObject = nullptr;
 static DaasAPI* g_daas = nullptr;
 
 static const typeset_t SIMPLE_TYPESET = 1;
 
-/* ---------------- Event handler ---------------- */
+/* ---------------- Events ---------------- */
 
 class DaasEvents : public IDaasApiEvent {
 public:
-    void dinAccepted(din_t) override {}
+    void dinAccepted(din_t din) override {
+        LOGD("[DaaS] dinAccepted %lu", din);
+    }
+
+    void ddoReceived(int payload_size, typeset_t typeset, din_t origin) override {
+        LOGD("[DaaS] ddoReceived from %lu size=%d", origin, payload_size);
+
+        if (typeset != SIMPLE_TYPESET) return;
+
+        DDO* ddo = nullptr;
+        if (g_daas->pull(origin, &ddo) != ERROR_NONE) {
+            LOGD("[DaaS] pull() failed");
+            return;
+        }
+
+        int value = 0;
+        ddo->getPayloadAsBinary((uint8_t*)&value, 0, 1);
+
+        JNIEnv* env;
+        g_vm->AttachCurrentThread(&env, nullptr);
+
+        jclass cls = env->FindClass("sebyone/libdaas/ddotest/DaasManager");
+        jmethodID mid = env->GetStaticMethodID(cls, "onDDOReceived", "(JI)V");
+        env->CallStaticVoidMethod(cls, mid, (jlong)origin, (jint)value);
+    }
+
+    void nodeConnectedToNetwork(din_t sid, din_t din) override {
+        LOGD("[DaaS] nodeConnectedToNetwork sid=%lu din=%lu", sid, din);
+    }
+
     void frisbeeReceived(din_t) override {}
     void nodeStateReceived(din_t) override {}
     void atsSyncCompleted(din_t) override {}
     void frisbeeDperfCompleted(din_t, uint32_t, uint32_t) override {}
     void nodeDiscovered(din_t, link_t) override {}
-    void nodeConnectedToNetwork(din_t, din_t) override {}
-
-    void ddoReceived(int payload_size, typeset_t typeset, din_t origin) override {
-        if (!g_daas || typeset != SIMPLE_TYPESET || payload_size != sizeof(int))
-            return;
-
-        DDO* ddo = nullptr;
-        g_daas->pull(origin, &ddo);
-        if (!ddo) return;
-
-        int value = 0;
-        ddo->getPayloadAsBinary(
-                reinterpret_cast<uint8_t*>(&value), 0, sizeof(int)
-        );
-
-        JNIEnv* env = nullptr;
-        if (g_vm->AttachCurrentThread(&env, nullptr) != JNI_OK)
-            return;
-
-        jclass cls = env->GetObjectClass(g_daasObject);
-        if (!cls) return;
-
-        jmethodID mid = env->GetStaticMethodID(
-                cls,
-                "onDDOReceived",
-                "(JI)V"
-        );
-        if (!mid) return;
-
-        env->CallStaticVoidMethod(
-                cls,
-                mid,
-                static_cast<jlong>(origin),
-                static_cast<jint>(value)
-        );
-    }
 };
 
 static DaasEvents g_events;
 
-/* ---------------- JNI ---------------- */
+/* ---------------- JNI lifecycle ---------------- */
 
 extern "C"
-JNIEXPORT jint JNICALL
-JNI_OnLoad(JavaVM* vm, void*) {
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
     g_vm = vm;
     return JNI_VERSION_1_6;
 }
 
+/* ---------------- API wrappers ---------------- */
+
 extern "C"
 JNIEXPORT void JNICALL
-Java_sebyone_libdaas_ddotest_DaasManager_init(
-        JNIEnv* env,
-        jobject /* thiz */,
-        jlong sid,
-        jlong din,
-        jstring uri
-) {
-    const char* c_uri = env->GetStringUTFChars(uri, nullptr);
-
+Java_sebyone_libdaas_ddotest_DaasManager_nativeCreate(JNIEnv*, jclass) {
+    LOGD("[DaaS] Creating DaasAPI instance...");
     g_daas = new DaasAPI(&g_events);
-    g_daas->doInit(static_cast<din_t>(sid), static_cast<din_t>(din));
-    g_daas->enableDriver(_LINK_INET4, c_uri);
-    g_daas->doPerform(PERFORM_CORE_THREAD);
-
-    jclass cls = env->FindClass("sebyone/libdaas/ddotest/DaasManager");
-    g_daasObject = env->NewGlobalRef(cls);
-
-    env->ReleaseStringUTFChars(uri, c_uri);
+    LOGD("[DaaS] Library version: %s", g_daas->getVersion());
 }
 
 extern "C"
-JNIEXPORT void JNICALL
-Java_sebyone_libdaas_ddotest_DaasManager_mapNode(
-        JNIEnv* env,
-        jobject /* thiz */,
-        jlong din,
-        jstring uri
-) {
+JNIEXPORT jint JNICALL
+Java_sebyone_libdaas_ddotest_DaasManager_nativeInit(
+        JNIEnv* env, jclass, din_t sid, din_t din) {
+
+    LOGD("[DaaS] Initializing with SID=%lu DIN=%lu", sid, din);
+    auto err = g_daas->doInit(sid, din);
+    LOGD("[DaaS] doInit() -> %d", err);
+    return err;
+}
+
+extern "C"
+JNIEXPORT jstring JNICALL
+Java_sebyone_libdaas_ddotest_DaasManager_nativeListDrivers(JNIEnv* env, jclass) {
+    return env->NewStringUTF(g_daas->listAvailableDrivers());
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_sebyone_libdaas_ddotest_DaasManager_nativeEnableDriver(
+        JNIEnv* env, jclass, jstring uri) {
+
     const char* c_uri = env->GetStringUTFChars(uri, nullptr);
-    g_daas->map(static_cast<din_t>(din), _LINK_INET4, c_uri);
+    LOGD("[DaaS] Enabling driver LINK_INET4 with URI %s", c_uri);
+
+    auto err = g_daas->enableDriver(_LINK_INET4, c_uri);
+
+    LOGD("[DaaS] enableDriver() -> %d", err);
+
     env->ReleaseStringUTFChars(uri, c_uri);
+    return err;
 }
 
 extern "C"
-JNIEXPORT void JNICALL
-Java_sebyone_libdaas_ddotest_DaasManager_sendSimpleDDO(
-        JNIEnv*,
-        jobject /* thiz */,
-        jlong remoteDin,
-        jint value
-) {
+JNIEXPORT jint JNICALL
+Java_sebyone_libdaas_ddotest_DaasManager_nativeMap(
+        JNIEnv* env, jclass, din_t din, jstring uri) {
+
+    const char* c_uri = env->GetStringUTFChars(uri, nullptr);
+
+    LOGD("[DaaS] Mapping DIN %lu to %s", din, c_uri);
+    auto err = g_daas->map((din_t)din, _LINK_INET4, c_uri);
+
+    LOGD("[DaaS] map() -> %d", err);
+
+    env->ReleaseStringUTFChars(uri, c_uri);
+    return err;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_sebyone_libdaas_ddotest_DaasManager_nativePerform(
+        JNIEnv*, jclass) {
+    return g_daas->doPerform(PERFORM_CORE_NO_THREAD);
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_sebyone_libdaas_ddotest_DaasManager_nativeSendDDO(
+        JNIEnv*, jclass, din_t remoteDin, jbyte value) {
+
     DDO ddo(SIMPLE_TYPESET);
-    ddo.setPayload(&value, sizeof(int));
-    g_daas->push(static_cast<din_t>(remoteDin), &ddo);
+    ddo.setPayload(&value, 1);
+
+    LOGD("[DaaS] push() value=%d -> DIN=%lu", value, remoteDin);
+
+    auto err = g_daas->push((din_t)remoteDin, &ddo);
+
+    LOGD("[DaaS] push() -> %d", err);
+    return err;
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_sebyone_libdaas_ddotest_DaasManager_perform(
-        JNIEnv*,
-        jobject /* thiz */
-) {
-    g_daas->doPerform(PERFORM_CORE_NO_THREAD);
+Java_sebyone_libdaas_ddotest_DaasManager_nativeAutoPull(
+        JNIEnv* env, jclass, jlong remoteDin) {
+
+    if (!g_daas) return;
+
+    DDO* inbound = nullptr;
+    auto err = g_daas->pull((din_t)remoteDin, &inbound);
+
+    if (err != ERROR_NONE || inbound == nullptr) {
+        return; // no data available
+    }
+
+    int value = 0;
+    inbound->getPayloadAsBinary((uint8_t*)&value, 0, sizeof(value));
+
+    din_t origin = inbound->getOrigin();
+    stime_t ts = inbound->getTimestamp();
+
+    LOGD("[AUTO-PULL] origin=%lu value=%d ts=%llu", origin, value, ts);
+
+    // notify Java UI
+    JNIEnv* jni = nullptr;
+    g_vm->AttachCurrentThread(&jni, nullptr);
+
+    jclass cls = jni->FindClass("sebyone/libdaas/ddotest/DaasManager");
+    jmethodID mid = jni->GetStaticMethodID(cls, "onAutoPull", "(JI)V");
+
+    if (mid)
+        jni->CallStaticVoidMethod(cls, mid, (jlong)origin, (jint)value);
+
+    delete inbound;
 }

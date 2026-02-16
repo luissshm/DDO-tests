@@ -1,19 +1,127 @@
 package sebyone.libdaas.ddotest
 
-import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import android.util.Log
+import android.widget.*
+import androidx.appcompat.app.AppCompatActivity
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import kotlin.random.Random
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var logView: TextView
+    private lateinit var ipView: TextView
+    private lateinit var dinView: TextView
+    private lateinit var remoteIpEdit: EditText
+    private lateinit var remoteDinEdit: EditText
+    private lateinit var payloadEdit: EditText
+
+    private val TAG = "DaaS-UI"
+//    private val localDin = Random.nextInt(100, 10000).toLong()
+    private val localDin = 103
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
 
-        // Start DAAS backend
-        startService(Intent(this, DaasService::class.java))
+        logView = findViewById(R.id.logView)
+        ipView = findViewById(R.id.localIpText)
+        dinView = findViewById(R.id.localDinText)
+        remoteIpEdit = findViewById(R.id.remoteIpEdit)
+        remoteDinEdit = findViewById(R.id.remoteDinEdit)
+        payloadEdit = findViewById(R.id.payloadEdit)
 
-        // No fragments
-        // No background threads
-        // No DAAS calls here
+        val btnStart = findViewById<Button>(R.id.btnStart)
+        val btnMap = findViewById<Button>(R.id.btnMap)
+        val btnSend = findViewById<Button>(R.id.btnSend)
+        val btnDrivers = findViewById<Button>(R.id.btnDrivers)
+//        val btnPull = findViewById<Button>(R.id.btnPull)
+
+        val localIp = getLocalIpAddress()
+        ipView.text = "Local IP: $localIp"
+        dinView.text = "DIN: $localDin"
+        log("Local IP detected: $localIp")
+
+        btnStart.setOnClickListener {
+            val uri = "$localIp:4000"
+            log("[DaaS] Starting agent with URI $uri")
+
+            DaasManager.startAgent(
+                sid = 100,
+                din = localDin,
+                localUri = uri
+            )
+
+            startPerformLoop()
+        }
+
+        btnMap.setOnClickListener {
+            val remoteIp = remoteIpEdit.text.toString()
+            val remoteDin = remoteDinEdit.text.toString().toLongOrNull()
+
+            if (remoteIp.isEmpty() || remoteDin == null) {
+                log("Invalid remote configuration")
+                return@setOnClickListener
+            }
+
+            val uri = "$remoteIp:4000"
+            log("[DaaS] Mapping remote DIN=$remoteDin → $uri")
+
+            DaasManager.mapNode(remoteDin, uri)
+        }
+
+        btnSend.setOnClickListener {
+            val remoteDin = remoteDinEdit.text.toString().toLongOrNull()
+            val value = payloadEdit.text.toString().toByte()
+
+            if (remoteDin == null || value.equals(null)) {
+                log("Invalid payload or DIN")
+                return@setOnClickListener
+            }
+
+            log("[DaaS] Sending DDO value=$value → DIN=$remoteDin")
+            DaasManager.sendTestDDO(remoteDin, value)
+        }
+
+        btnDrivers.setOnClickListener {
+            val drivers = DaasManager.nativeListDrivers()
+            log("[DaaS] Available drivers: $drivers")
+        }
+    }
+
+    private fun startPerformLoop() {
+        Thread {
+            while (true) {
+                DaasManager.loop()
+
+                val remoteDin = remoteDinEdit.text.toString().toLongOrNull()
+                if (remoteDin != null) {
+                    DaasManager.autoPull(remoteDin)
+                }
+
+                Thread.sleep(10)
+            }
+        }.start()
+
+        log("[DaaS] Perform loop started + auto pull polling")
+    }
+
+    private fun log(msg: String) {
+        Log.d(TAG, msg)
+        runOnUiThread {
+            logView.append(msg + "\n")
+        }
+    }
+
+    private fun getLocalIpAddress(): String {
+        return try {
+            NetworkInterface.getNetworkInterfaces().asSequence()
+                .flatMap { it.inetAddresses.asSequence() }
+                .firstOrNull { !it.isLoopbackAddress && it is Inet4Address }
+                ?.hostAddress ?: "0.0.0.0"
+        } catch (e: Exception) {
+            "0.0.0.0"
+        }
     }
 }

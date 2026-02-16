@@ -4,35 +4,63 @@ import android.util.Log
 
 object DaasManager {
 
-    private const val TAG = "DAAS"
-
     init {
         System.loadLibrary("daas_jni")
     }
 
-    external fun init(sid: Long, din: Long, localUri: String)
-    external fun mapNode(din: Long, uri: String)
-    external fun sendSimpleDDO(remoteDin: Long, value: Int)
-    external fun perform()
+    private const val TAG = "DaaS"
 
-    // ===== DDO callback from native =====
+    external fun nativeCreate()
+    external fun nativeInit(sid: Int, din: Int): Int
+    external fun nativeEnableDriver(uri: String): Int
+    external fun nativeMap(din: Long, uri: String): Int
+    external fun nativePerform(): Int
+    external fun nativeSendDDO(din: Long, value: Byte): Int
+    external fun nativeListDrivers(): String
+    external fun nativeAutoPull(remoteDin: Long)
+
+    fun startAgent(sid: Int, din: Int, localUri: String) {
+        Log.d(TAG, "Starting agent...")
+        nativeCreate()
+
+        val init = nativeInit(sid, din)
+        Log.d(TAG, "Initialization result = $init")
+
+        val drivers = nativeListDrivers()
+        Log.d(TAG, "Available drivers = $drivers")
+
+        val enable = nativeEnableDriver(localUri)
+        Log.d(TAG, "enableDriver result = $enable")
+
+        Log.d(TAG, "Node ready")
+    }
+
+    fun mapNode(din: Long, uri: String) {
+        val r = nativeMap(din, uri)
+        Log.d(TAG, "map result = $r")
+    }
+
+    fun sendTestDDO(din: Long, value: Byte) {
+        Log.d(TAG, "Sending DDO value=$value")
+        val r = nativeSendDDO(din, value)
+        Log.d(TAG, "push result = $r")
+    }
+
+    fun loop() {
+        nativePerform()
+    }
+
+    fun autoPull(remoteDin: Long) {
+        nativeAutoPull(remoteDin)
+    }
+
     @JvmStatic
     fun onDDOReceived(origin: Long, value: Int) {
+        Log.d(TAG, "DDO RECEIVED from $origin value=$value")
+    }
 
-        if (value >= 0) {
-            // ---------------- DATA ----------------
-            Log.d("DAAS", "RX DATA=$value from DIN=$origin")
-
-            // SEND ACK
-            val ackValue = -value
-            sendSimpleDDO(origin, ackValue)
-
-            Log.d("DAAS", "TX ACK=$ackValue to DIN=$origin")
-
-        } else {
-            // ---------------- ACK ----------------
-            val ackFor = -value
-            Log.d("DAAS", "RX ACK for value=$ackFor from DIN=$origin")
-        }
+    @JvmStatic
+    fun onAutoPull(origin: Long, value: Int) {
+        Log.d("DaaS-AUTO", "AUTO-PULL origin=$origin value=$value")
     }
 }
