@@ -1,5 +1,6 @@
 #include <jni.h>
 #include <string>
+#include <vector>
 #include <android/log.h>
 #include "daas.hpp"
 
@@ -142,6 +143,52 @@ Java_sebyone_libdaas_ddotest_DaasManager_nativeSendDDO(
 
     LOGD("[DaaS] push() -> %d", err);
     return err;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_sebyone_libdaas_ddotest_DaasManager_nativeDiscovery(
+        JNIEnv*, jclass) {
+
+    LOGD("[DaaS] Initializing discovery INET4");
+
+    auto err = g_daas->discovery(_LINK_INET4);
+
+    LOGD("[DaaS] discovery(_LINK_INET4) -> %d", err);
+    return err;
+}
+
+extern "C"
+JNIEXPORT jlongArray JNICALL
+Java_sebyone_libdaas_ddotest_DaasManager_nativeListNodes(
+        JNIEnv* env, jclass) {
+
+    if (!g_daas) {
+        LOGD("[DaaS] nativeListNodes: g_daas is null");
+        return nullptr;
+    }
+
+    // Get the local node list
+    dinlist_t nodes = g_daas->listNodes();
+    jsize count = static_cast<jsize>(nodes.size());
+
+    LOGD("[DaaS] nativeListNodes -> %d nodes", count);
+
+    // Create a Java long array to return
+    jlongArray jnodes = env->NewLongArray(count);
+    if (!jnodes) {
+        LOGD("[DaaS] nativeListNodes: failed to allocate jlongArray");
+        return nullptr;
+    }
+
+    // Copy values into Java array
+    std::vector<jlong> tmp(count);
+    for (jsize i = 0; i < count; ++i) {
+        tmp[i] = static_cast<jlong>(nodes[i]);
+    }
+    env->SetLongArrayRegion(jnodes, 0, count, tmp.data());
+
+    return jnodes;
 }
 
 extern "C"

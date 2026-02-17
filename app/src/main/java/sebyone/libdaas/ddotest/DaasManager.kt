@@ -21,6 +21,8 @@ object DaasManager {
     external fun nativeListDrivers(): String
     external fun nativeAutoPull(remoteDin: Long)
 
+    external fun nativeDiscovery()
+
     fun startAgent(sid: Int, din: Int, localUri: String) {
         Log.d(TAG, "Starting agent...")
         nativeCreate()
@@ -40,6 +42,11 @@ object DaasManager {
     fun mapNode(din: Long, uri: String) {
         val r = nativeMap(din, uri)
         Log.d(TAG, "map result = $r")
+    }
+
+    fun discovery() {
+        val r = nativeDiscovery()
+        Log.d(TAG, "discovery result = $r")
     }
 
     fun sendTestDDO(din: Long, value: Byte) {

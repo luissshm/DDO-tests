@@ -36,7 +36,7 @@ class MainActivity : AppCompatActivity() {
         val btnMap = findViewById<Button>(R.id.btnMap)
         val btnSend = findViewById<Button>(R.id.btnSend)
         val btnDrivers = findViewById<Button>(R.id.btnDrivers)
-//        val btnPull = findViewById<Button>(R.id.btnPull)
+        val btnDiscovery = findViewById<Button>(R.id.btnDiscovery)
 
         val localIp = getLocalIpAddress()
         ipView.text = "Local IP: $localIp"
@@ -87,6 +87,11 @@ class MainActivity : AppCompatActivity() {
         btnDrivers.setOnClickListener {
             val drivers = DaasManager.nativeListDrivers()
             log("[DaaS] Available drivers: $drivers")
+        }
+
+        btnDiscovery.setOnClickListener {
+            log("[DaaS] Starting Discovery")
+            val discovery = DaasManager.discovery()
         }
     }
 
