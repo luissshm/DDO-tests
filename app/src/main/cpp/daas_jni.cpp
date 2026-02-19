@@ -23,14 +23,12 @@ public:
     void ddoReceived(int payload_size, typeset_t typeset, din_t origin) override {
         LOGD("[DaaS] ddoReceived from %lu size=%d", origin, payload_size);
 
-        if (typeset != SIMPLE_TYPESET) return;
-
         DDO* ddo = nullptr;
         if (g_daas->pull(origin, &ddo) != ERROR_NONE) {
             LOGD("[DaaS] pull() failed");
             return;
         }
-
+        LOGD("[DaaS] DDO Received with typeset %d", typeset);
         int value = 0;
         ddo->getPayloadAsBinary((uint8_t*)&value, 0, 1);
 
@@ -42,6 +40,10 @@ public:
         env->CallStaticVoidMethod(cls, mid, (jlong)origin, (jint)value);
     }
 
+    void nodeDiscovered(din_t din, link_t link) override {
+        LOGD("[DaaS] Node Discovered DIN=%lu LINK=%d", din, link);
+    }
+
     void nodeConnectedToNetwork(din_t sid, din_t din) override {
         LOGD("[DaaS] nodeConnectedToNetwork sid=%lu din=%lu", sid, din);
     }
@@ -50,7 +52,6 @@ public:
     void nodeStateReceived(din_t) override {}
     void atsSyncCompleted(din_t) override {}
     void frisbeeDperfCompleted(din_t, uint32_t, uint32_t) override {}
-    void nodeDiscovered(din_t, link_t) override {}
 };
 
 static DaasEvents g_events;
@@ -159,12 +160,23 @@ Java_sebyone_libdaas_ddotest_DaasManager_nativeDiscovery(
 }
 
 extern "C"
+JNIEXPORT void JNICALL
+Java_sebyone_libdaas_ddotest_DaasManager_nativeSetDiscoveryStateFull(
+        JNIEnv*, jclass) {
+
+    discovery_state_t dis = discovery_full;
+    LOGD("[DaaS] Setting discovery state to -> discovery_full");
+    g_daas->setDiscoveryState(dis);
+
+}
+
+extern "C"
 JNIEXPORT jlongArray JNICALL
 Java_sebyone_libdaas_ddotest_DaasManager_nativeListNodes(
         JNIEnv* env, jclass) {
 
     if (!g_daas) {
-        LOGD("[DaaS] nativeListNodes: g_daas is null");
+        LOGD("[DaaS] List Nodes: g_daas is null");
         return nullptr;
     }
 
@@ -172,12 +184,12 @@ Java_sebyone_libdaas_ddotest_DaasManager_nativeListNodes(
     dinlist_t nodes = g_daas->listNodes();
     jsize count = static_cast<jsize>(nodes.size());
 
-    LOGD("[DaaS] nativeListNodes -> %d nodes", count);
+    LOGD("[DaaS] List Nodes -> %d nodes", count);
 
     // Create a Java long array to return
     jlongArray jnodes = env->NewLongArray(count);
     if (!jnodes) {
-        LOGD("[DaaS] nativeListNodes: failed to allocate jlongArray");
+        LOGD("[DaaS] ListNodes: failed to allocate jlongArray");
         return nullptr;
     }
 

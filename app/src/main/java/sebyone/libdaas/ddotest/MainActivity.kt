@@ -6,11 +6,13 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import kotlin.collections.forEachIndexed
 import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var logView: TextView
+    private lateinit var scrollView: ScrollView
     private lateinit var ipView: TextView
     private lateinit var dinView: TextView
     private lateinit var remoteIpEdit: EditText
@@ -19,13 +21,14 @@ class MainActivity : AppCompatActivity() {
 
     private val TAG = "DaaS-UI"
 //    private val localDin = Random.nextInt(100, 10000).toLong()
-    private val localDin = 102
+    private val localDin = 103
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         logView = findViewById(R.id.logView)
+        scrollView = findViewById<ScrollView>(R.id.logScrollView)
         ipView = findViewById(R.id.localIpText)
         dinView = findViewById(R.id.localDinText)
         remoteIpEdit = findViewById(R.id.remoteIpEdit)
@@ -35,7 +38,7 @@ class MainActivity : AppCompatActivity() {
         val btnStart = findViewById<Button>(R.id.btnStart)
         val btnMap = findViewById<Button>(R.id.btnMap)
         val btnSend = findViewById<Button>(R.id.btnSend)
-        val btnDrivers = findViewById<Button>(R.id.btnDrivers)
+        val btnListNodes = findViewById<Button>(R.id.btnListNodes)
         val btnDiscovery = findViewById<Button>(R.id.btnDiscovery)
 
         val localIp = getLocalIpAddress()
@@ -80,13 +83,21 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
+            if (value < -127 || value > 126) {
+                log("Payload must be a number between {-127,126}")
+                return@setOnClickListener
+            }
+
             log("[DaaS] Sending DDO value=$value → DIN=$remoteDin")
             DaasManager.sendTestDDO(remoteDin, value)
         }
 
-        btnDrivers.setOnClickListener {
-            val drivers = DaasManager.nativeListDrivers()
-            log("[DaaS] Available drivers: $drivers")
+        btnListNodes.setOnClickListener {
+            val nodes: LongArray? = DaasManager.nativeListNodes()
+            // Log each node DIN
+            nodes?.forEachIndexed { index, din ->
+                log("Node #$index -> DIN=$din")
+            }
         }
 
         btnDiscovery.setOnClickListener {
@@ -138,6 +149,10 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, msg)
         runOnUiThread {
             logView.append(msg + "\n")
+            // Scroll to bottom
+            scrollView.post {
+                scrollView.fullScroll(ScrollView.FOCUS_DOWN)
+            }
         }
     }
 

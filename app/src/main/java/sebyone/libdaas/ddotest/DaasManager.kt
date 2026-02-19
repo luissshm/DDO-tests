@@ -19,9 +19,10 @@ object DaasManager {
     external fun nativePerform(): Int
     external fun nativeSendDDO(din: Long, value: Byte): Int
     external fun nativeListDrivers(): String
+    external fun nativeListNodes(): LongArray
     external fun nativeAutoPull(remoteDin: Long)
-
     external fun nativeDiscovery()
+    external fun nativeSetDiscoveryStateFull()
 
     fun startAgent(sid: Int, din: Int, localUri: String) {
         Log.d(TAG, "Starting agent...")
@@ -35,7 +36,7 @@ object DaasManager {
 
         val enable = nativeEnableDriver(localUri)
         Log.d(TAG, "enableDriver result = $enable")
-
+        setDiscoveryStateFull()
         Log.d(TAG, "Node ready")
     }
 
@@ -47,6 +48,10 @@ object DaasManager {
     fun discovery() {
         val r = nativeDiscovery()
         Log.d(TAG, "discovery result = $r")
+    }
+
+    fun setDiscoveryStateFull() {
+        nativeSetDiscoveryStateFull()
     }
 
     fun sendTestDDO(din: Long, value: Byte) {
@@ -61,6 +66,22 @@ object DaasManager {
 
     fun autoPull(remoteDin: Long) {
         nativeAutoPull(remoteDin)
+    }
+
+    fun listNodes() {
+        Log.d(TAG, "Listing Nodes...")
+
+        val nodes: LongArray? = nativeListNodes() // call the JNI function
+
+        if (nodes == null || nodes.isEmpty()) {
+            Log.d(TAG, "No nodes found")
+            return
+        }
+
+        // Log each node DIN
+        nodes.forEachIndexed { index, din ->
+            Log.d(TAG, "Node #$index -> DIN=$din")
+        }
     }
 
     @JvmStatic
