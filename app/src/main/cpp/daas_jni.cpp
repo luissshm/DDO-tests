@@ -21,14 +21,13 @@ public:
     }
 
     void ddoReceived(int payload_size, typeset_t typeset, din_t origin) override {
-        LOGD("[DaaS] ddoReceived from %lu size=%d", origin, payload_size);
+        LOGD("[DaaS] ddoReceived from %lu size=%d typeset=%d",
+             origin, payload_size, typeset);
 
         DDO* ddo = nullptr;
-        if (g_daas->pull(origin, &ddo) != ERROR_NONE) {
-            LOGD("[DaaS] pull() failed");
+        if (g_daas->pull(origin, &ddo) != ERROR_NONE || !ddo)
             return;
-        }
-        LOGD("[DaaS] DDO Received with typeset %d", typeset);
+
         int value = 0;
         ddo->getPayloadAsBinary((uint8_t*)&value, 0, 1);
 
@@ -36,8 +35,18 @@ public:
         g_vm->AttachCurrentThread(&env, nullptr);
 
         jclass cls = env->FindClass("sebyone/libdaas/ddotest/DaasManager");
-        jmethodID mid = env->GetStaticMethodID(cls, "onDDOReceived", "(JI)V");
-        env->CallStaticVoidMethod(cls, mid, (jlong)origin, (jint)value);
+        jmethodID mid = env->GetStaticMethodID(cls,
+                                               "onDDOReceivedExtended",
+                                               "(JII)V");
+
+        if (mid)
+            env->CallStaticVoidMethod(cls,
+                                      mid,
+                                      (jlong)origin,
+                                      (jint)typeset,
+                                      (jint)value);
+
+        delete ddo;
     }
 
     void nodeDiscovered(din_t din, link_t link) override {
@@ -156,6 +165,19 @@ Java_sebyone_libdaas_ddotest_DaasManager_nativeDiscovery(
     auto err = g_daas->discovery(_LINK_INET4);
 
     LOGD("[DaaS] discovery(_LINK_INET4) -> %d", err);
+    return err;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_sebyone_libdaas_ddotest_DaasManager_nativeLocate(
+        JNIEnv*, jclass, jlong din, jint timeout_ms) {
+
+    if (!g_daas) return -1;
+
+    LOGD("[DaaS] Locating DIN=%lu with timeout=%dms", din, timeout_ms);
+    auto err = g_daas->locate((din_t)din, timeout_ms);
+    LOGD("[DaaS] locate() -> %d", err);
     return err;
 }
 

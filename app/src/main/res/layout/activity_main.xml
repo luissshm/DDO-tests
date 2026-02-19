@@ -1,112 +1,116 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#121212"
+    android:padding="16dp">
 
-    <LinearLayout
-        android:orientation="vertical"
-        android:padding="16dp"
+    <!-- HEADER -->
+    <TextView
+        android:id="@+id/localIpText"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:text="Local IP"
+        android:textColor="#E0E0E0"
+        android:textSize="14sp"/>
 
-        <TextView
-            android:id="@+id/localIpText"
-            android:text="Local IP"
-            android:textSize="18sp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
+    <TextView
+        android:id="@+id/localDinText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="DIN"
+        android:textColor="#B0BEC5"
+        android:textSize="13sp"
+        android:layout_marginBottom="12dp"/>
 
-        <TextView
-            android:id="@+id/localDinText"
-            android:textSize="18sp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"/>
-
-        <Space android:layout_height="12dp" android:layout_width="match_parent"/>
-
-        <EditText
-            android:id="@+id/remoteIpEdit"
-            android:hint="Remote IP"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
-
-        <EditText
-            android:id="@+id/remoteDinEdit"
-            android:hint="Remote DIN"
-            android:inputType="number"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
-
-        <EditText
-            android:id="@+id/payloadEdit"
-            android:hint="Payload value"
-            android:inputType="numberSigned"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
-
-        <Space android:layout_height="16dp" android:layout_width="match_parent"/>
+    <!-- ACTION BUTTONS -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginBottom="12dp">
 
         <Button
             android:id="@+id/btnStart"
-            android:text="Start Agent"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
-
-        <Button
-            android:id="@+id/btnMap"
-            android:text="Map Remote Node"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
-
-        <Button
-            android:id="@+id/btnSend"
-            android:text="Send Test DDO"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="Start Ag"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#1976D2"
+            android:layout_marginEnd="8dp"/>
 
         <Button
             android:id="@+id/btnDiscovery"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Start Discovery" />
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="Discovery"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#6A1B9A"
+            android:layout_marginEnd="8dp"/>
 
         <Button
-            android:id="@+id/btnListNodes"
-            android:text="List Nodes"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
-
-        <Space android:layout_height="16dp" android:layout_width="match_parent"/>
-
-        <LinearLayout
-            android:orientation="vertical"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:padding="8dp">
-
-            <TextView
-                android:text="LOG"
-                android:textStyle="bold"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"/>
-
-            <ScrollView
-                android:id="@+id/logScrollView"
-                android:layout_width="match_parent"
-                android:layout_height="400dp"
-                android:background="#111111"
-                android:padding="4dp">
-
-                <TextView
-                    android:id="@+id/logView"
-                    android:textSize="12sp"
-                    android:textColor="#00FF00"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:scrollbars="vertical"/>
-            </ScrollView>
-
-        </LinearLayout>
-
+            android:id="@+id/btnSend"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:text="Send DDO"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#00897B"/>
     </LinearLayout>
-</ScrollView>
+
+    <!-- PAYLOAD INPUT -->
+    <EditText
+        android:id="@+id/payloadEdit"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:hint="Payload value (-127 to 126)"
+        android:inputType="numberSigned"
+        android:textColor="#FFFFFF"
+        android:textColorHint="#757575"
+        android:backgroundTint="#455A64"
+        android:layout_marginBottom="12dp"/>
+
+    <!-- LAST PAYLOAD DISPLAY -->
+    <TextView
+        android:id="@+id/lastPayloadText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Last → typeset=-  value=-"
+        android:textColor="#4FC3F7"
+        android:textSize="15sp"
+        android:padding="8dp"
+        android:background="#1E1E1E"
+        android:layout_marginBottom="12dp"/>
+
+    <!-- LOG TITLE -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Logs"
+        android:textColor="#9CCC65"
+        android:textStyle="bold"
+        android:layout_marginBottom="4dp"/>
+
+    <!-- LOG VIEW -->
+    <ScrollView
+        android:id="@+id/logScrollView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#000000"
+        android:padding="10dp">
+
+        <TextView
+            android:id="@+id/logView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#00FF00"
+            android:textSize="12sp"
+            android:typeface="monospace"/>
+    </ScrollView>
+
+</LinearLayout>

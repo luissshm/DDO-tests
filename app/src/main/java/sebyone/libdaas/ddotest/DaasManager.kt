@@ -24,6 +24,9 @@ object DaasManager {
     external fun nativeDiscovery()
     external fun nativeSetDiscoveryStateFull()
 
+    external fun nativeLocate(din: Long, timeoutMs: Int = 1000): Int
+
+
     fun startAgent(sid: Int, din: Int, localUri: String) {
         Log.d(TAG, "Starting agent...")
         nativeCreate()
@@ -84,21 +87,30 @@ object DaasManager {
         }
     }
 
+    fun locateNode(din: Long, timeoutMs: Int = 1000): Int {
+        val err = nativeLocate(din, timeoutMs)
+        Log.d(TAG, "locateNode($din) -> $err")
+        return err
+    }
+
+
     @JvmStatic
-    fun onDDOReceived(origin: Long, value: Int) {
-        Log.d(TAG, "DDO RECEIVED from $origin value=$value")
-        (ddoCallback as? dynamicListener)?.onDDOReceived(origin, value)
+    fun onNodeDiscovered(din: Long) {
+        Log.d(TAG, "Node discovered: $din")
+        (ddoCallback as? dynamicListener)?.onNodeDiscovered(din)
     }
 
     @JvmStatic
-    fun onAutoPull(origin: Long, value: Int) {
-        Log.d("DaaS-AUTO", "AUTO-PULL origin=$origin value=$value")
-        (ddoCallback as? dynamicListener)?.onAutoPull(origin, value)
+    fun onDDOReceivedExtended(origin: Long, typeset: Int, value: Int) {
+        Log.d(TAG, "DDO RECEIVED origin=$origin typeset=$typeset value=$value")
+        (ddoCallback as? dynamicListener)
+            ?.onDDOReceivedExtended(origin, typeset, value)
     }
 
-    // Interface type to avoid casts
     interface dynamicListener {
-        fun onDDOReceived(origin: Long, value: Int)
+        fun onNodeDiscovered(din: Long)
+        fun onDDOReceivedExtended(origin: Long, typeset: Int, value: Int)
         fun onAutoPull(origin: Long, value: Int)
     }
+
 }

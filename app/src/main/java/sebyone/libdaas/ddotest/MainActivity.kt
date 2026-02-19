@@ -6,7 +6,7 @@ import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import java.net.Inet4Address
 import java.net.NetworkInterface
-import kotlin.collections.forEachIndexed
+import kotlin.concurrent.fixedRateTimer
 import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
@@ -15,30 +15,28 @@ class MainActivity : AppCompatActivity() {
     private lateinit var scrollView: ScrollView
     private lateinit var ipView: TextView
     private lateinit var dinView: TextView
-    private lateinit var remoteIpEdit: EditText
-    private lateinit var remoteDinEdit: EditText
     private lateinit var payloadEdit: EditText
+    private lateinit var lastPayloadView: TextView
 
     private val TAG = "DaaS-UI"
-//    private val localDin = Random.nextInt(100, 10000).toLong()
-    private val localDin = 103
+    private val localDin = 102L
+
+    private var discoveredDin: Long? = null
+    private var discoveryRunning = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         logView = findViewById(R.id.logView)
-        scrollView = findViewById<ScrollView>(R.id.logScrollView)
+        scrollView = findViewById(R.id.logScrollView)
         ipView = findViewById(R.id.localIpText)
         dinView = findViewById(R.id.localDinText)
-        remoteIpEdit = findViewById(R.id.remoteIpEdit)
-        remoteDinEdit = findViewById(R.id.remoteDinEdit)
         payloadEdit = findViewById(R.id.payloadEdit)
+        lastPayloadView = findViewById(R.id.lastPayloadText)
 
         val btnStart = findViewById<Button>(R.id.btnStart)
-        val btnMap = findViewById<Button>(R.id.btnMap)
         val btnSend = findViewById<Button>(R.id.btnSend)
-        val btnListNodes = findViewById<Button>(R.id.btnListNodes)
         val btnDiscovery = findViewById<Button>(R.id.btnDiscovery)
 
         val localIp = getLocalIpAddress()
@@ -46,45 +44,26 @@ class MainActivity : AppCompatActivity() {
         dinView.text = "DIN: $localDin"
         log("Local IP detected: $localIp")
 
+        // ---------------- Buttons ----------------
         btnStart.setOnClickListener {
             val uri = "$localIp:4000"
             log("[DaaS] Starting agent with URI $uri")
 
             DaasManager.startAgent(
                 sid = 100,
-                din = localDin,
+                din = localDin.toInt(),
                 localUri = uri
             )
 
             startPerformLoop()
         }
 
-        btnMap.setOnClickListener {
-            val remoteIp = remoteIpEdit.text.toString()
-            val remoteDin = remoteDinEdit.text.toString().toLongOrNull()
-
-            if (remoteIp.isEmpty() || remoteDin == null) {
-                log("Invalid remote configuration")
-                return@setOnClickListener
-            }
-
-            val uri = "$remoteIp:4000"
-            log("[DaaS] Mapping remote DIN=$remoteDin → $uri")
-
-            DaasManager.mapNode(remoteDin, uri)
-        }
-
         btnSend.setOnClickListener {
-            val remoteDin = remoteDinEdit.text.toString().toLongOrNull()
-            val value = payloadEdit.text.toString().toByte()
+            val value = payloadEdit.text.toString().toByteOrNull()
+            val remoteDin = discoveredDin
 
-            if (remoteDin == null || value.equals(null)) {
-                log("Invalid payload or DIN")
-                return@setOnClickListener
-            }
-
-            if (value < -127 || value > 126) {
-                log("Payload must be a number between {-127,126}")
+            if (value == null || remoteDin == null) {
+                log("Invalid payload or no discovered DIN")
                 return@setOnClickListener
             }
 
@@ -92,56 +71,65 @@ class MainActivity : AppCompatActivity() {
             DaasManager.sendTestDDO(remoteDin, value)
         }
 
-        btnListNodes.setOnClickListener {
-            val nodes: LongArray? = DaasManager.nativeListNodes()
-            // Log each node DIN
-            nodes?.forEachIndexed { index, din ->
-                log("Node #$index -> DIN=$din")
+        btnDiscovery.setOnClickListener {
+            if (!discoveryRunning) {
+                discoveryRunning = true
+                startDiscovery()
+            } else {
+                log("Discovery already running...")
             }
         }
 
-        btnDiscovery.setOnClickListener {
-            log("[DaaS] Starting Discovery")
-            val discovery = DaasManager.discovery()
+        // ---------------- DDO Listener ----------------
+        DaasManager.ddoCallback = object : DaasManager.dynamicListener {
+            override fun onNodeDiscovered(din: Long) {
+                runOnUiThread {
+                    log("[DISCOVERED] DIN=$din")
+                    discoveredDin = din
+                    // Automatically locate and start auto-pull
+                    DaasManager.locateNode(din)
+                }
+            }
+
+            override fun onDDOReceivedExtended(origin: Long, typeset: Int, value: Int) {
+                runOnUiThread {
+                    lastPayloadView.text = "Last → typeset=$typeset value=$value"
+                    log("[DDO] origin=$origin typeset=$typeset value=$value")
+                }
+            }
+
+            override fun onAutoPull(origin: Long, value: Int) {
+                runOnUiThread {
+                    lastPayloadView.text = "Last → typeset=1 value=$value"
+                    log("[AUTO-PULL] origin=$origin value=$value")
+                }
+            }
         }
     }
 
-    // ------------------ DDO Listener Hook ------------------
-    private val ddoListener = object : DaasManager.dynamicListener {
-        override fun onDDOReceived(origin: Long, value: Int) {
-            runOnUiThread { log("[DDO RECEIVED] from $origin value=$value") }
+    // ---------------- Discovery every 10s ----------------
+    private fun startDiscovery() {
+        log("[DaaS] Starting discovery every 10s")
+
+        fixedRateTimer("discoveryTimer", true, 0, 10_000) {
+            if (!discoveryRunning) cancel()
+
+            runOnUiThread {
+                log("[DaaS] Discovery call...")
+                DaasManager.discovery()
+            }
         }
-        override fun onAutoPull(origin: Long, value: Int) {
-            runOnUiThread { log("[AUTO-PULL] origin=$origin value=$value") }
-        }
     }
 
-    override fun onResume() {
-        super.onResume()
-        // Register listener so DaasManager callbacks go to this activity
-        DaasManager.ddoCallback = ddoListener
-    }
-
-    override fun onPause() {
-        super.onPause()
-        // Unregister listener to avoid leaks
-        DaasManager.ddoCallback = null
-    }
-
+    // ---------------- Perform / Auto-poll loop ----------------
     private fun startPerformLoop() {
         Thread {
             while (true) {
                 DaasManager.loop()
-
-                val remoteDin = remoteDinEdit.text.toString().toLongOrNull()
-                if (remoteDin != null) {
-                    DaasManager.autoPull(remoteDin)
-                }
-
+                discoveredDin?.let { DaasManager.autoPull(it) }
                 Thread.sleep(10)
             }
         }.start()
-
         log("[DaaS] Perform loop started + auto pull polling")
     }
 
@@ -149,10 +137,7 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, msg)
         runOnUiThread {
             logView.append(msg + "\n")
-            // Scroll to bottom
-            scrollView.post {
-                scrollView.fullScroll(ScrollView.FOCUS_DOWN)
-            }
+            scrollView.post { scrollView.fullScroll(ScrollView.FOCUS_DOWN) }
         }
     }
 
