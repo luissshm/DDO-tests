@@ -51,6 +51,28 @@ public:
 
     void nodeDiscovered(din_t din, link_t link) override {
         LOGD("[DaaS] Node Discovered DIN=%lu LINK=%d", din, link);
+
+        if (!g_vm) return;
+
+        JNIEnv* env = nullptr;
+        g_vm->AttachCurrentThread(&env, nullptr);
+
+        jclass cls = env->FindClass("sebyone/libdaas/ddotest/DaasManager");
+        if (!cls) {
+            LOGD("[JNI] Failed to find DaasManager class");
+            return;
+        }
+
+        jmethodID mid = env->GetStaticMethodID(cls,
+                                               "onNodeDiscovered",
+                                               "(J)V");
+
+        if (!mid) {
+            LOGD("[JNI] Failed to find onNodeDiscovered method");
+            return;
+        }
+
+        env->CallStaticVoidMethod(cls, mid, (jlong)din);
     }
 
     void nodeConnectedToNetwork(din_t sid, din_t din) override {

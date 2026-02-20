@@ -96,8 +96,15 @@ object DaasManager {
 
     @JvmStatic
     fun onNodeDiscovered(din: Long) {
-        Log.d(TAG, "Node discovered: $din")
-        (ddoCallback as? dynamicListener)?.onNodeDiscovered(din)
+        Log.d(TAG, "Node discovered from JNI → DIN=$din")
+
+        val listener = ddoCallback as? dynamicListener
+        if (listener == null) {
+            Log.d(TAG, "No UI listener registered — discovery ignored")
+            return
+        }
+
+        listener.onNodeDiscovered(din)
     }
 
     @JvmStatic

@@ -60,10 +60,18 @@ class MainActivity : AppCompatActivity() {
 
         btnSend.setOnClickListener {
             val value = payloadEdit.text.toString().toByteOrNull()
-            val remoteDin = discoveredDin
 
-            if (value == null || remoteDin == null) {
-                log("Invalid payload or no discovered DIN")
+            log("[UI] Send pressed")
+            log("[UI] Stored remote DIN = $discoveredDin")
+
+            if (value == null) {
+                log("Invalid payload")
+                return@setOnClickListener
+            }
+
+            val remoteDin = discoveredDin
+            if (remoteDin == null) {
+                log("Cannot send — no remote DIN available")
                 return@setOnClickListener
             }
 
@@ -84,10 +92,19 @@ class MainActivity : AppCompatActivity() {
         DaasManager.ddoCallback = object : DaasManager.dynamicListener {
             override fun onNodeDiscovered(din: Long) {
                 runOnUiThread {
-                    log("[DISCOVERED] DIN=$din")
-                    discoveredDin = din
-                    // Automatically locate and start auto-pull
-                    DaasManager.locateNode(din)
+                    if (discoveredDin == null) {
+                        discoveredDin = din
+                        discoveryRunning = false
+
+                        log("[DISCOVERED] Remote DIN stored = $din")
+                        log("[DaaS] Discovery stopped (node found)")
+                        log("[DaaS] Locating node $din ...")
+
+                        val result = DaasManager.locateNode(din)
+                        log("[DaaS] locate($din) result = $result")
+                    } else {
+                        log("[DISCOVERED] Ignored duplicate DIN=$din")
+                    }
                 }
             }
 
@@ -95,6 +112,16 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     lastPayloadView.text = "Last → typeset=$typeset value=$value"
                     log("[DDO] origin=$origin typeset=$typeset value=$value")
+
+                    if (discoveryRunning) {
+                        discoveryRunning = false
+                        log("[DaaS] Discovery stopped (DDO received)")
+                    }
+
+                    if (discoveredDin == null) {
+                        discoveredDin = origin
+                        log("[DaaS] Remote DIN learned from DDO = $origin")
+                    }
                 }
             }
 
