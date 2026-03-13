@@ -19,7 +19,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var lastPayloadView: TextView
 
     private val TAG = "DaaS-UI"
-    private val localDin = 102L
+    private val localDin = 103L
 
     private var discoveredDin: Long? = null
     private var discoveryRunning = false
