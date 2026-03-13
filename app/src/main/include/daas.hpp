@@ -44,9 +44,9 @@
 class DaasAPI
 {
 public:
-    DaasAPI();
-    DaasAPI(IDaasApiEvent *);
-    DaasAPI(IDaasApiEvent *, const char *lhver_);
+    DaasAPI();                                    
+    DaasAPI(IDaasApiEvent *);                     
+    DaasAPI(IDaasApiEvent *, const char *lhver_); 
     ~DaasAPI();
 
     //////////////////////////////////////////////////////////////////////
@@ -84,7 +84,7 @@ public:
     @end
     */
     daas_error_t doEnd();                         // releases resources and deactivates node
-
+   
     /**
         @details Resets the local node and clears all resources. It disconnects also from the network that it currently is.
         @param none
@@ -92,7 +92,7 @@ public:
         @end
     */
     daas_error_t doReset();                       // reset resources and restarts services
-
+    
     /**
         @details Initializes services and resources for the local node.
         @param sid: SID of the local node
@@ -104,7 +104,7 @@ public:
         @end
     */
     daas_error_t doInit(din_t sid, din_t din);  // initializes services and resources (Real-Time or Multi-Threading, release dependent)
-
+    
     /**
 
         @details Executes the node's main processing loop in either real-time or multi-threading mode. 
@@ -124,7 +124,7 @@ public:
         @end
     */
     daas_error_t doPerform(performs_mode_t mode); // perform node's task ( in RT mode needs to be called cyclically)
-
+    
     /**
         @details Configure driver for network technology (links)
         
@@ -147,6 +147,9 @@ public:
     /**
         @details Returns the status of the local node.
        
+        @param none
+        
+        @returns the status of the local node.
         - This includes hardware version, linked channels, synchronization status, security policy, and more.
     
         @end
@@ -154,22 +157,67 @@ public:
     nodestate_t getStatus(); // returns local node's instance status
 
     /**
-        @details The function sets whether the local node should accept all incoming requests, 
-        including those from unknown DINs, known din from different network or only from din inside the same network.
-       
-        @param policy_level:
-         - @b 0: accept requests only from known DINs inside the same network.
-         - @b 1: accept requests from known DINs from different networks and inside the same network.
-         - @b 2: accept requests from all DINs, including unknown ones
-
-        
-        @note Default policy_level is @b 1.
-        During the discovery, the policy_level is temporary set to @b 2 since the node has to accept all the incoming request. 
-        Right after the discovery process is compleated or goes out of time, the policy_level is set back to the previous value.
-
-        @end
-    */
-    void setAcceptRequestsLevel(int policy_level);
+     * @details Configures whether the local node accepts incoming packets
+     * from other nodes, according to the specified trust policy.
+     *
+     * The selected policy defines the validation rules applied to incoming
+     * requests and can be tuned to enforce stricter security or allow
+     * more flexible communication.
+     *
+     * @param policy_level The trust policy to apply:
+     * 
+     *  - @b trust_none:
+     *      Reject all incoming requests from other nodes, including mapped ones.
+     *
+     *  - @b trust_mapped_only:
+     *      Accept requests only from mapped nodes.
+     *
+     *  - @b trust_mapped_and_routed:
+     *      Accept requests from mapped nodes and from nodes that route
+     *      through known nodes as intermediate hops. 
+     *      
+     *  - @b trust_mapped_and_same_network:
+     *      Accept requests from mapped nodes and from nodes that belong
+     *      to the same network (with the same SID), even if they
+     *      are not mapped.
+     *      This is the default policy level.
+     *
+     *  - @b trust_mapped_and_routed_and_same_network:
+     *      Accept requests from mapped nodes, from nodes that route
+     *      through known nodes as intermediate hops, and from nodes
+     *      that belong to the same network (same SID), even if they
+     *      are not mapped.
+     *
+     *  - @b trust_all:
+     *      Accept requests from all DINs, including unknown ones.
+     *
+     * @warning
+     *  - @b trust_mapped_only rejects all locate requests from nodes
+     *    that are not mapped. This policy is recommended only for
+     *    use cases where security is critical and the network topology
+     *    is strictly controlled.
+     *
+     *  - @b trust_all allows all incoming requests, including those
+     *    from unknown DINs. This may introduce security risks, as
+     *    unauthorized nodes could interact with the local node.
+     *    Use this policy only in controlled environments or for testing.
+     * 
+     * @note The default policy is @b trust_mapped_and_same_network.
+     * 
+     * Policies that allow routed nodes
+     * (@b trust_mapped_and_routed,
+     *  @b trust_mapped_and_routed_and_same_network,
+     *  and @b trust_all)
+     * may accept nodes that belong to a different network.
+     *
+     * During the discovery process, the policy is temporarily set to
+     * @b trust_all to allow communication with all nodes.
+     * Once discovery completes or times out, the previous policy
+     * is automatically restored.
+     *
+     * @end
+     */
+    void setAcceptRequestsLevel(accept_request_policy_t policy_level);
      
     /**
         @details Saves the current configuration to the specified storage interface.
@@ -296,6 +344,8 @@ public:
      
         @param none : starts discovery on all available links
 
+        @note If the node is already connected to a network, it will automatically disconnect from the current network if it discovers a new one during the discovery process.
+
         @returns @b ERROR_NONE on success, or an error code on failure.
         @see doInit
 
@@ -305,10 +355,10 @@ public:
      */
       daas_error_t discovery();
 
-      /**
+    /**
      *  @details Starts a discovery process to locate nodes in the network.\n 
      *  This process will send the enabled drivers URI to a sort of broadcast in order to auto-map this node to remote ones.\n
-       @note The reception of this packet cannot be controlled, it can only be disabled.
+        @note The reception of this packet cannot be controlled, it can only be disabled.
      
         @param link: The communication technology to use for discovery. If not specified, all available links will be used.
 
@@ -320,6 +370,22 @@ public:
         @end
      */
       daas_error_t discovery(link_t link);
+
+    /**
+     *  @details Starts a discovery process to locate nodes in the network.\n 
+     *  This process will send the enabled drivers URI to a sort of broadcast in order to auto-map this node to remote ones.\n
+        @note The reception of this packet cannot be controlled, it can only be disabled.
+     
+        @param sid: The SID of the network to connect to.
+
+        @returns @b ERROR_NONE on success, or an error code on failure.
+        @see doInit
+
+        \par Example:
+        \snippet examples/discovery/main.cpp discovery_without_init
+        @end
+     */
+      daas_error_t discovery(din_t sid);
 
 
     /**
@@ -484,25 +550,32 @@ public:
     /* Exchange     -------------------------------------------------------------------------------------------- */
     
     /**
-        @details Starts a real-time session with a remote node.
-
-        @param din: DIN of the remote node to start the session with
-
-        @warning Not implemented yet!
-
-        @returns true if the RT session was successfully started, false otherwise. (OPEN CONNECTION!!!!)
-        @end
-    */
-    bool use(din_t din);                                                    
+     * @details Starts a real-time session with a remote node. This function establishes
+     * a real-time communication channel with the specified remote node. All transmitted
+     * data must be acknowledged (ACK) by the remote node. If the ACK is not received
+     * within the specified timeout, the function retries sending the data for a
+     * configured number of attempts.
+     *
+     * @param din The DIN of the remote node with which to start the session.
+     * @param rx_queue_size The size of the receive queue for incoming data from the remote node. If set to 0, a default size of 1024 will be used.
+     * @param retry The number of retries if no ACK is received. Default is 3.
+     * @param timeout The maximum time to wait for an ACK from the remote node (in milliseconds). If the ACK is not received within this time, the function will retry sending the data.
+     *
+     * @return true if the real-time session is successfully established and the
+     *         connection is opened; false otherwise.
+     * 
+     * \par Example:
+     * \snippet examples/stream/main.cpp stream
+     */
+    bool use(din_t din, uint32_t rx_queue_size = 0, uint32_t retry = 3, uint32_t timeout = 1000);                                                    
 
     /**
         @details Ends a real-time session with a remote node.
         
         @param din: DIN of the remote node to end the session with
 
-        @warning Not implemented yet!
-
         @returns true if the RT session was successfully ended, false otherwise.
+        @see use
         @end
     */
     bool end(din_t din);
@@ -513,27 +586,26 @@ public:
         @param din: DIN of the remote node to send data to
         @param outbound: pointer to the data to send
         @param size: size of the data to send
-
-        @warning Not implemented yet!
+        @param timeout: maximum time to wait the ACK from the remote node (in milliseconds). 
+        If the ACK is not received within the timeout, the function will retry sending the data.
+        @param retry: number of retries if no ACK is received. Default is 3.
 
         @returns the size of data sent.
-
+        @see use
         @end
     */
-    unsigned send(din_t din, unsigned char *outbound, unsigned size);
+    uint32_t send(din_t din, uint8_t *outbound, uint32_t size, uint32_t timeout = 1000, uint32_t retry = 3);
 
     /**
         @details Checks if there is data available from a remote node in a real-time session.
         
         @param din: DIN of the remote node to check for data
 
-        @warning Not implemented yet!
-
         @returns the size of data received.
-
+        @see use
         @end
     */
-    unsigned received(din_t din);
+    uint32_t received(din_t din);
 
 
     /**
@@ -541,15 +613,12 @@ public:
         
         @param din: DIN of the remote node to receive data from
         @param inbound: reference to a variable that will hold the received data
-        @param max_size: maximum size of data to receive
-
-        @warning Not implemented yet!
 
         @returns the size of data received.
-
+        @see use
         @end
     */
-    unsigned receive(din_t din, unsigned char &inbound, unsigned max_size);
+    uint32_t receive(din_t din, uint8_t *&inbound);
 
     /* Transfer     -------------------------------------------------------------------------------------------- */
     /**
@@ -654,20 +723,22 @@ public:
     daas_error_t frisbeeICMP(din_t din, uint32_t timeout, uint32_t retry); 
 
     /**
-        @details Measures the performance of data transfer to a remote node.
-        
-        @param din: DIN of the remote node to ping
-        @param sender_pkt_total: total number of packets to send
-        @param block_size: size of each packet in bytes
-        @param sender_trip_period: time period between each packet sent (in milliseconds)
-        
-        @returns @b ERROR_NONE on success, or an error code on failure.
-        @end
-    */
+     * @details Measures the data transfer performance toward a remote node by sending
+     *          a sequence of test packets and evaluating the communication behavior.
+     *
+     * @param din DIN of the remote node to be tested.
+     * @param sender_pkt_total Total number of packets to send.
+     * @param block_size Size of each packet, expressed in bytes.
+     * @param sender_trip_period Time interval between consecutive packet transmissions,
+     *                           expressed in milliseconds.
+     *
+     * @return @b ERROR_NONE on success, or an error code on failure.
+     */
+
     daas_error_t frisbeeDPERF(din_t din, uint32_t sender_pkt_total = 10, uint32_t block_size = 1024*1024, uint32_t sender_trip_period = 0); 
     
     /**
-        @details Returns the result of a frisbee performance test.
+        @details Returns the result of the frisbeeDPERF test.
         
         @param none
         
@@ -704,17 +775,61 @@ public:
 
 
     /**
-        @details Unbinds the local node from the current network, closing all the open channels.
-        The mapping table is preserved, so the node can rebind to the same network later without needing to remap known nodes.
-
-        @warning After unbinding, the node will not be able to communicate with some nodes of the previous network (it depends on their @ref setAcceptRequestsLevel).
-        
-        @param none
-
-        @returns @b ERROR_NONE on success, or an error code on failure.
-        @end
+     * @details Unbinds the local node from the current network by closing all open communication channels.
+     *          The mapping table is preserved, allowing the node to rebind to the same network later
+     *          without the need to remap previously known nodes.
+     *
+     * @warning After unbinding, the node may no longer be able to communicate with some nodes
+     *          of the previous network, depending on their @ref setAcceptRequestsLevel configuration.
+     *
+     * @return @b ERROR_NONE on success, or an error code on failure.
      */
+
     daas_error_t unbindNetwork(); 
+
+     /**
+      * @details Configures specific options for the DaaS API. This function allows fine-tuning of 
+      * various parameters that affect the behavior of the API.
+      * 
+      * @param option The type of option to set (option_type):
+      * - @b option_set_ddo_rx_buffer_size: Sets the maximum size of the receive buffer for DDOs. The value is expressed in bytes. 
+      *   If the specified size is smaller than the minimum required to store a DDO without payload plus its header (75 bytes), 
+      *   the value is automatically increased to this minimum (75 bytes).
+      *   @b Note: The default buffer size is 1024 bytes.
+      * 
+      * - @b option_set_rt_buffer_size: Sets the maximum size of the transmit and receive buffers used for real-time sessions. 
+      *   The value is expressed in bytes.
+      *   @b Note: The default buffer size is 1024 bytes.
+      *
+      * @warning When receiving DMEs, the available buffer space is evaluated only after
+      * the reception is completed. As a result, a DDO may still be received even
+      * if its size exceeds the configured buffer limit.
+      * 
+      * @return @b ERROR_NONE on success, or an error code on failure.
+      */
+     daas_error_t setOptions(option_t option, uint32_t val);
+
+    /**
+    * @details Retrieves the SID of the local node.
+    *
+    * @return The SID of the local node.
+    */
+    din_t getSid();
+
+    /** 
+     * @details Retrieves the DIN of the local node.
+     * 
+     * @return The DIN of the local node.
+    */
+    din_t getDin();
+
+    /**
+     * @details Converts a DaaS error code to a human-readable string.
+     * @param error_code The DaaS error code to convert.
+     * 
+     * @return A string describing the error code.
+     */
+    const char* errorToString(daas_error_t error_code);
 };
 
 #endif // DAASIOT_H

@@ -43,6 +43,8 @@ typedef uint64_t stime_t;     // Time-stamp absolute date (64bit) !!!!!!!!!!!!!!
 typedef uint64_t din_t;       // DIN (64bit, 0 NULL,  )
 typedef uint16_t typeset_t;   // Typeset (16bit)
 
+using typeset_fun = void(*)(din_t);
+
 enum syscode_t
 {
     ___undefined = 0,
@@ -51,8 +53,11 @@ enum syscode_t
     _cor_dme_received,
     _cor_dme_routed,
 
-    _cor_rx_buffer,
-    _cor_tx_buffer,
+    _cor_rx_buffer_count,
+    _cor_tx_buffer_count,
+
+    _cor_rx_buffer_size,
+    _cor_tx_buffer_size,
 
     // ATS
     _ats_delta_avg,
@@ -71,7 +76,10 @@ typedef enum : unsigned // Supported communications technologies
     _LINK_BT, // Bluetooth
     _LINK_MQTT5,    // MQTT
     _LINK_UART,     // Serial line
-    _LINK_RAW
+    _LINK_LORA,     // LoRa
+    _LINK_ZIGBEE,   // Zigbee
+    _LINK_RAW,
+    MAX_LINKS
 } link_t;
 
 typedef enum
@@ -79,24 +87,6 @@ typedef enum
     PERFORM_CORE_THREAD = 0,
     PERFORM_CORE_NO_THREAD
 } performs_mode_t;
-
-//TODO OPCODE:
-//opcode bitmask es opcode = 00000011 -> uint8 code = OPCODE_ACK_REQUEST | OPCODE_RESYNC_REQUEST
-//Prima di spedire un pacchetto, ci salviamo il checksum del pacchetto intero (per ora header)
-//insieme al pacchetto. Tramite dme_ack chiediamo conferma della corretta ricezione e leggiamo il
-//checksum nuovo
-//Se checksum nostro == checksum ricevuto -> OK
-//Altrimenti rispediamo 
-
-//Meglio Ack e Nack? 
-typedef enum : uint16_t
-{
-    OPCODE_NULL = 0x00,
-
-    OPCODE_ACK_REQUEST = 1 << 0,
-    OPCODE_ACK_RESPONSE = 1 << 1,
-    OPCODE_RESYNC_REQUEST = 1 << 2,
-} opcode_t;
 
 typedef enum : uint8_t
 {
@@ -121,7 +111,32 @@ typedef enum : uint8_t
 
 } ddo_policy_t;
 
-using typeset_fun = void(*)(din_t);
+typedef enum : uint8_t 
+{
+    option_set_ddo_rx_buffer_size,
+    option_set_rt_buffer_size
+}option_t;
+
+#define flag_trust_mapped  (1 << 0)
+#define flag_trust_same_network  (1 << 1)
+#define flag_trust_routed      (1 << 2)
+#define flag_trust_all  ((uint8_t)(~(1 << 8)))
+
+typedef enum : uint8_t
+{
+    trust_none = 0,
+    trust_mapped_only = flag_trust_mapped,
+    trust_mapped_and_same_network  = flag_trust_mapped | flag_trust_same_network,
+    trust_mapped_and_routed = flag_trust_mapped | flag_trust_routed,
+    trust_mapped_and_routed_and_same_network = flag_trust_mapped | flag_trust_routed | flag_trust_same_network,
+    trust_all  = flag_trust_all,
+} accept_request_policy_t;
+
+enum stream_type : uint8_t {
+    STREAM_OPEN,
+    STREAM_DATA,
+    STREAM_CLOSE
+};
 
 typedef enum
 {
@@ -144,6 +159,7 @@ typedef enum
     ERROR_INVALID_DME,
     ERROR_THREADS_ALREADY_STARTED,
     ERROR_NOT_IMPLEMENTED,
+    ERROR_TX_QUEUE_FULL,
     ERROR_UNKNOWN
 
 } daas_error_t;
@@ -214,28 +230,83 @@ public:
     const T& operator[](uint32_t index) const;
 
     void clear();    
-    void full_clear();    
+    void full_clear();
+    Vector(const Vector<T> &other);
+    Vector<T> &operator=(const Vector<T> &other);
 };
 
+/**
+    @details Interface used to implement event handlers for DaaS API events. The functions are
+    called by the DaaS API library when specific events occur, allowing the user to define
+    custom behavior in response to these events.
+ */
 class IDaasApiEvent
 {
 public:
     virtual ~IDaasApiEvent() = default;
+    /**
+        @details Called when a din is accepted by the node (incoming request).
+        @param din The din that has been accepted.
+    */
     virtual void dinAccepted(din_t) = 0;
+    /**
+        @details Called when a new DDO is received.
+        @param payload_size Size of the received payload.
+        @param typeset Typeset of the received DDO.
+        @param din DIN of the sender node.
+    */
     virtual void ddoReceived(int payload_size, typeset_t, din_t) = 0;
+    /**
+        @details Called when a frisbee message is received.
+        @param din The din of the node that sent the frisbee message.
+     */
     virtual void frisbeeReceived(din_t) = 0;
+    /**
+        @details Called when a node state message is received.
+        @param din The din of the node whose state has been received.
+     */
     virtual void nodeStateReceived(din_t) = 0;
+    /**
+        @details Called when ATS synchronization is completed.
+        @param din The din of the node that has completed ATS synchronization.
+     */
     virtual void atsSyncCompleted(din_t) = 0;
-    virtual void frisbeeDperfCompleted(din_t, uint32_t packets_sent, uint32_t block_size)= 0;
-    virtual void nodeDiscovered(din_t din, link_t link) = 0;
-    virtual void nodeConnectedToNetwork(din_t sid, din_t din) = 0;
-};
+    /**
+        @details Called when a frisbee dperf operation is completed.
+        @param din The din of the node that completed the frisbee dperf.
+        @param packets_sent Number of packets sent during the dperf operation.
+        @param block_size Size of each data block sent.
 
-class DaaSEvent
-{
-public:
-    virtual ~DaaSEvent() = default;
-    virtual int daasEvent(int, int, int, int) = 0;
+        @note To get detailed results, refer to the dperf_info_result structure returned by
+            @ref DaasAPI::getFrisbeeResultDPERF().
+     */
+    virtual void frisbeeDperfCompleted(din_t, uint32_t packets_sent, uint32_t block_size)= 0;
+    /**
+        @details Called when a new node is discovered in the network.
+        @param din The din of the newly discovered node.
+        @param link The link through which the node was discovered.
+    
+        @warning The node might have not be accepted yet, this event is just to inform that a new node has been seen.
+    */
+    virtual void nodeDiscovered(din_t din, link_t link) = 0;
+
+    /**
+        @details Called when this node connects to a DaaS network.
+        @param sid The SID of the connected network.
+        @param din The update DIN of this node used inside the network.
+    */
+    virtual void nodeConnectedToNetwork(din_t sid, din_t din) = 0;
+
+    /**
+        @details Called when a stream information is received. 
+        @param din The din of the node that sent the stream information.
+        @param pkt_type The type of the packet received:
+           (1) - STREAM_OPEN: indicates that a stream open request has been received.
+           (2) - STREAM_DATA: indicates that a stream data packet has been received.
+           (3) - STREAM_CLOSE: indicates that a stream close request has been received.
+        @param stream_id The ID of the stream associated with the received packet.
+     */
+    virtual void streamInfoReceived(din_t din, stream_type pkt_type, uint32_t stream_id) = 0;
 };
 
 // Interface used to implement device specific storage handler to backup/restore 
@@ -264,27 +335,21 @@ struct dperf_info_result {
 
 typedef struct
 {
-    stime_t lasttime;       // time reference
-    uint32_t hwver;         // platform (hard-coded)
-    uint32_t linked;        // channels counter (0=not linked)
-    uint32_t lock;          // required security policy
-    uint8_t sklen;    // security phrase lenght
-    uint8_t skey[14]; // security phrase (UTF-8)
-    uint32_t form;          // data formatting model
-    uint32_t codec;         // data encryption level
+    uint64_t  power_on_time;  // time since power on (ms)
+    uint32_t linked;          // channels counter (0=not linked)
+    uint32_t lock;            // required security policy
+    uint8_t sklen;            // security phrase lenght
+    uint8_t skey[14];         // security phrase (UTF-8)
     
-    uint8_t accept_request_policy; // ENABLE code to call unknowDIN()
-    
+    accept_request_policy_t accept_request_policy;
+
+
+    ddo_policy_t ddo_policy;
+    discovery_state_t discovery_state;
+
     int64_t  oCap_net;        // ATS on network offset
     bool net_in_sync;         // synchronization status (0=not in sync)
 
-    uint64_t  on_time; // time since power on (ms)
-
-    ddo_policy_t ddo_policy; // DDO send policy
-
-    discovery_state_t discovery_state;
-
-    // Availabe data ??
 } nodestate_t;
 
 typedef Vector<int> list_element;
